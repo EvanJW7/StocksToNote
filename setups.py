@@ -2,7 +2,6 @@ import asyncio, requests, stocks_list
 import yfinance as yf
 from bs4 import BeautifulSoup
 
-
 def closest_number(close, high, low):
     if abs(close - high) < abs(close - low):
         return True
