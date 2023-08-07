@@ -1,4 +1,4 @@
-import asyncio, requests, insideday
+import asyncio, requests, stocks_list
 import yfinance as yf
 from bs4 import BeautifulSoup
 
@@ -7,7 +7,7 @@ def closest_number(close, high, low):
     if abs(close - high) < abs(close - low):
         return True
 
-stocks = insideday.stocks_filtered_lots
+stocks = stocks_list.stocks
 
 async def get_stock_data(stock, i):
     global stocks_in_play
