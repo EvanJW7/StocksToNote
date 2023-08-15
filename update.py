@@ -4,6 +4,7 @@ import requests
 from bs4 import BeautifulSoup
 import stocks_list
 import logging
+import warnings
 
 logging.basicConfig(
     filename='watchlist.log',
@@ -11,10 +12,11 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(module)s - %(message)s - line %(lineno)d'
 )
 logger = logging.getLogger(__name__)
+warnings.filterwarnings("ignore", category=RuntimeWarning, message="divide by zero")
 
 class Watchlist:
     def __init__(self):
-        self.stocks = stocks_list.stocks
+        self.stocks = stocks_list.stocks_filtered_lots
         self.stocks_in_play = 0
         self.sizzlers = 0
 
@@ -80,11 +82,13 @@ class Watchlist:
 
     def get_current_price(self, stock):
         try:
-            url = 'https://www.marketwatch.com/investing/stock/cleu?mod=search_symbol'
+            url = f'https://www.marketwatch.com/investing/stock/{stock}?mod=search_symbol'
             res = requests.get(url)
             soup = BeautifulSoup(res.text, 'lxml')
             cp = soup.findAll('td', class_ = "table__cell u-semi")[0].text
             cp = float(cp[1:])
+            logger.info(f"Close price of {stock}: {cp}")
+            return cp
         except Exception as e:
             logger.critical(f"Unable to get current price of {stock} due to {e}")
             return 999
@@ -97,11 +101,13 @@ class Watchlist:
             stock_data = await asyncio.to_thread(ticker.history, period=p)
             stock_data = stock_data.reset_index()
             #Since we are grabbing 100 days of data, [99] is the most recent day and [98] is the day before, etc.
-            gap = (stock_data['Open'][99] - stock_data['High'][98]) / stock_data['High'][98] * 100
+            gap = (stock_data['Open'][99] - stock_data['Close'][98]) / stock_data['Close'][98] * 100
             green_initial_day = stock_data['Close'][99] > stock_data['Open'][99]
-            avg_vol = stock_data['Volume'][0:99].mean()
-            vol_ratio = stock_data['Volume'][99] / avg_vol
-            equity_vol = stock_data['Open'][0:99].mean() * stock_data['Volume'][0:99].mean()
+            median_vol = stock_data['Volume'][0:99].median()
+            if median_vol == 0:
+                logger.warning(f"Median volume is 0 for {stock}")
+            equity_vol = stock_data['Close'][0:99].mean() * median_vol
+            vol_ratio = stock_data['Volume'][99] / median_vol
             if green_initial_day and round(gap) >= 3 and equity_vol >= 500000 and round(vol_ratio) > 5:
                 date = stock_data['Date'][99]
                 mc = self.get_market_cap(stock)
@@ -122,13 +128,15 @@ class Watchlist:
 
     async def main(self):
         tasks = []
-        print("\n Stock      Date              Sector             MarketCap     EquityVol        Gap     VolRatio   "
+        print("\n Stock      Date              Sector             MarketCap     EquityVol        Gap      VolRatio   "
               "ShortFloat    Vol180")
         #Grab 100 days of stock data and stop after doing that for the previous 10 days
-        for i in range(100, 111):
+        days = 1
+        for i in range(100, 110):
             print(
-                f'{i}------------------------------------------------------------------------------------------------------'
-                f'------------------')
+                f'{days}--------------------------------------------------------------------------------------------'
+                f'---------------------------')
+            days += 1
             for stock in self.stocks:
                 tasks.append(asyncio.create_task(self.get_stock_data(stock, i)))
             await asyncio.gather(*tasks)
@@ -140,3 +148,8 @@ class Watchlist:
 if __name__ == '__main__':
     my_watchlist = Watchlist()
     asyncio.run(my_watchlist.main())
+
+
+
+
+
