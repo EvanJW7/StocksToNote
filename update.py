@@ -5,6 +5,7 @@ from bs4 import BeautifulSoup
 import stocks_list
 import logging
 import warnings
+import numpy as np
 
 logging.basicConfig(
     filename='watchlist.log',
@@ -43,19 +44,6 @@ class Watchlist:
         except Exception as e:
             logger.error(f"Unexpected error on get_short_float request for {stock}: {e}")
             return "No data"
-
-    def get_volatility(self, stock):
-        try:
-            url = f'https://www.alphaquery.com/stock/{stock}/volatility-option-statistics/180-day/historical-volatility'
-            res = requests.get(url)
-            soup = BeautifulSoup(res.content, 'lxml')
-            volatility = soup.findAll('div', class_='indicator-figure-inner')[0]
-            vol = float(volatility.text) * 100
-            vol = round(vol, 2)
-            return vol
-        except Exception as e:
-            logger.error(f"Unexpected error on get_volatility request for {stock}: {e}")
-            return 0
 
     def get_sector(self, stock):
         try:
@@ -103,23 +91,30 @@ class Watchlist:
             #Since we are grabbing 100 days of data, [99] is the most recent day and [98] is the day before, etc.
             gap = (stock_data['Open'][99] - stock_data['Close'][98]) / stock_data['Close'][98] * 100
             green_initial_day = stock_data['Close'][99] > stock_data['Open'][99]
-            median_vol = stock_data['Volume'][0:99].median()
-            if median_vol == 0:
-                logger.warning(f"Median volume is 0 for {stock}")
-            equity_vol = stock_data['Close'][0:99].mean() * median_vol
-            vol_ratio = stock_data['Volume'][99] / median_vol
-            if green_initial_day and round(gap) >= 3 and equity_vol >= 500000 and round(vol_ratio) > 5:
+            avg_vol = stock_data['Volume'][0:99].mean()
+            equity_vol = stock_data['Close'][50:99].mean() * stock_data['Volume'][50:99].median()
+            vol_ratio = stock_data['Volume'][99] / avg_vol
+            #If stock passes screen, fetch data for it and print
+            if green_initial_day and round(gap) >= 3 and equity_vol >= 500000 and round(vol_ratio) > 3:
                 date = stock_data['Date'][99]
                 mc = self.get_market_cap(stock)
                 sf = self.get_short_float(stock)
-                vol = self.get_volatility(stock)
                 sector = self.get_sector(stock)
                 current_price = self.get_current_price(stock)
+                #Calculate volatility
+                closing_prices = stock_data['Close'][0:99]
+                log_returns = [np.log(closing_prices[i] / closing_prices[i - 1]) for i in range(1, len(closing_prices))]
+                avg_return = np.mean(log_returns)
+                squared_deviations = [(log_return - avg_return) ** 2 for log_return in log_returns]
+                variance = np.mean(squared_deviations)
+                historical_volatility = np.sqrt(variance)
+                trading_days_per_year = 252
+                vol = round(historical_volatility * np.sqrt(trading_days_per_year) * 100, 2)
                 momentum = self.closest_number(current_price, stock_data['High'][99], stock_data['Open'][98])
-                if vol > 60 and momentum:
+                if momentum:
                     print(
                         f"{stock:>5}{date.strftime('%m/%d/%Y'):>14}{sector:^30}{mc:>8}{format(round(equity_vol), ','):>15}"
-                        f"{round(gap, 2):>11}%{round(vol_ratio, 2):>11}{sf:>12}{vol:>12}%")
+                        f"{round(gap, 2):>11}%{round(vol_ratio, 2):>11}{sf:>12}{vol:>13}%")
                     self.stocks_in_play += 1
                     if vol > 100:
                         self.sizzlers += 1
@@ -129,13 +124,13 @@ class Watchlist:
     async def main(self):
         tasks = []
         print("\n Stock      Date              Sector             MarketCap     EquityVol        Gap      VolRatio   "
-              "ShortFloat    Vol180")
+              "ShortFloat   Volatility")
         #Grab 100 days of stock data and stop after doing that for the previous 10 days
         days = 1
         for i in range(100, 110):
             print(
-                f'{days}--------------------------------------------------------------------------------------------'
-                f'---------------------------')
+                f'{days}-------------------------------------------------------------------------------------------'
+                f'-------------------------------')
             days += 1
             for stock in self.stocks:
                 tasks.append(asyncio.create_task(self.get_stock_data(stock, i)))
