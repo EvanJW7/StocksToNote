@@ -1,7 +1,6 @@
 import pandas as pd
-import matplotlib.pyplot as plt
 
-path = '/Users/evanwright/Downloads/america_2023-08-17.csv'
+path = '/Users/evanwright/Downloads/stocks.csv'
 
 df = pd.read_csv(path)
 df = df.reset_index(drop=True)
@@ -14,3 +13,4 @@ while x < len(df):
     else:
         stocks.append((str(df['Ticker'][x])).strip())
     x += 1
+
