@@ -126,12 +126,10 @@ class Watchlist:
         print("\n Stock      Date              Sector             MarketCap     EquityVol        Gap      VolRatio   "
               "ShortFloat   Volatility")
         #Grab 100 days of stock data and stop after doing that for the previous 5 days
-        days = 1
         for i in range(100, 106):
             print(
                 f'-------------------------------------------------------------------------------------------'
                 f'-------------------------------')
-            days += 1
             for stock in self.stocks:
                 tasks.append(asyncio.create_task(self.get_stock_data(stock, i)))
             await asyncio.gather(*tasks)
