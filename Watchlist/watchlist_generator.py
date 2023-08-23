@@ -7,6 +7,8 @@ import logging
 import warnings
 import numpy as np
 
+logging.getLogger("yfinance").setLevel(logging.CRITICAL)
+
 logging.basicConfig(
     filename='watchlist.log',
     level=logging.INFO,
