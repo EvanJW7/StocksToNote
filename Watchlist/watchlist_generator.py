@@ -127,8 +127,8 @@ class Watchlist:
         tasks = []
         print("\n Stock      Date              Sector             MarketCap     EquityVol        Gap      VolRatio   "
               "ShortFloat   Volatility")
-        #Grab 100 days of stock data and stop after doing that for the previous 5 days
-        for i in range(100, 106):
+        #Grab 100 days of stock data for the current day, and loop backwards to get the data for the last 10 days 
+        for i in range(100, 110):
             print(
                 f'-------------------------------------------------------------------------------------------'
                 f'-------------------------------')
