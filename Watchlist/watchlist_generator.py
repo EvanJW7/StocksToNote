@@ -11,7 +11,8 @@ from datetime import datetime, timedelta
 logging.basicConfig(
     filename='watchlist.log',
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(module)s - %(message)s - line %(lineno)d'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(module)s - %(message)s - line %(lineno)d',
+    datefmt='%Y-%m-%d %I:%M:%S %p'
 )
 logger = logging.getLogger(__name__)
 warnings.filterwarnings("ignore", category=RuntimeWarning, message="divide by zero")
@@ -19,6 +20,7 @@ warnings.filterwarnings("ignore", category=RuntimeWarning, message="divide by ze
 class Watchlist:
     def __init__(self):
         self.stocks = stocks_list.stocks_filtered_lots
+        self.stocks = ['RPD', 'KD', 'GROV', 'AMRX', 'ARRY', 'NKLA']
         self.stocks_in_play = 0
         self.sizzlers = 0
 
@@ -89,13 +91,13 @@ class Watchlist:
             input_date = datetime.strptime(start_date_formatted, "%Y-%m-%d")
             next_day = input_date + timedelta(days=1)
             end_date = next_day.strftime("%Y-%m-%d")
-            df = yf.download(stock, start=start_date_formatted, end=end_date, interval='1m', progress=False)
+            df = yf.download(stock, start=start_date_formatted, end=end_date, interval='5m', progress=False)
             # Exclude the first bar because yfinance includes the sum of premarket volume for the first candle
             df = df[1:]
-            evidence_of_selling = "No"
+            evidence_of_selling = "False"
             highest_volume_row = df[df['Volume'] == df['Volume'].max()]
             if highest_volume_row['Open'].values[0] >= highest_volume_row['Close'].values[0]:
-                evidence_of_selling = "Yes"
+                evidence_of_selling = "True"
             return evidence_of_selling
         except:
             logger.warning(f"Unable to get_evidence_of_selling for {stock} for unknown reason")
@@ -131,13 +133,13 @@ class Watchlist:
                 historical_volatility = np.sqrt(variance)
                 vol = round(historical_volatility * np.sqrt(252) * 100, 2)
                 momentum = self.closest_number(current_price, stock_data['High'][99], stock_data['Open'][98])
-                if momentum:
-                    print(
+                #if momentum and evidence_of_selling == 'False':
+                print(
                         f"{stock:>5}{date.strftime('%m/%d/%Y'):>14}{sector:^30}{mc:>8}{format(round(equity_vol), ','):>15}"
                         f"{round(gap, 2):>11}%{round(vol_ratio, 2):>11}{sf:>12}{vol:>13}{evidence_of_selling:>15}")
-                    self.stocks_in_play += 1
-                    if vol > 100:
-                        self.sizzlers += 1
+                self.stocks_in_play += 1
+                if vol > 100:
+                    self.sizzlers += 1
         except KeyError:
             logger.warning(f"KeyError on get_stock_data request for {stock}")
         except IndexError:
@@ -148,7 +150,7 @@ class Watchlist:
         print("\n Stock      Date              Sector             MarketCap     EquityVol        Gap      VolRatio   "
               "ShortFloat   Volatility  EvidenceofSelling")
         #Grab 100 days of stock data and stop after doing that for the previous 10 days
-        for i in range(100, 110):
+        for i in range(100, 130):
             print(
                 f'{i}----------------------------------------------------------------------------------------'
                 f'----------------------------------------------------')
@@ -163,6 +165,8 @@ class Watchlist:
 if __name__ == '__main__':
     my_watchlist = Watchlist()
     asyncio.run(my_watchlist.main())
+
+
 
 
 
