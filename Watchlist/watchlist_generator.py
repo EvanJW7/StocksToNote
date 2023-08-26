@@ -15,12 +15,12 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %I:%M:%S %p'
 )
 logger = logging.getLogger(__name__)
+
 warnings.filterwarnings("ignore", category=RuntimeWarning, message="divide by zero")
 
 class Watchlist:
     def __init__(self):
-        self.stocks = stocks_list.stocks_filtered_lots
-        self.stocks = ['RPD', 'KD', 'GROV', 'AMRX', 'ARRY', 'NKLA']
+        self.stocks = stocks_list.stocks
         self.stocks_in_play = 0
         self.sizzlers = 0
 
@@ -63,13 +63,17 @@ class Watchlist:
             logger.error(f"Unexpected error on get_sector request for {stock}: {e}")
             return "N/A"
 
-    def closest_number(self, close, high, low):
-        dist1 = abs(close - high)
-        dist2 = abs(close - low)
-        if dist1 < dist2:
+    def closest_number(self, close, high, low, stock):
+        try:
+            dist1 = abs(close - high)
+            dist2 = abs(close - low)
+            if dist1 < dist2:
+                return True
+            else:
+                return False
+        except Exception as e:
+            logger.critical(f"Unexpected error on closest_number calculation for {stock}: {e}")
             return True
-        else:
-            return False
 
     def get_current_price(self, stock):
         try:
@@ -81,7 +85,7 @@ class Watchlist:
             logger.info(f"Close price of {stock}: {cp}")
             return cp
         except Exception as e:
-            logger.critical(f"Unable to get current price of {stock} due to {e}")
+            logger.critical(f"Unexpected error on get_current_price request for {stock}: {e}")
             return 999
 
     def get_evidence_of_selling(self, start_date, stock):
@@ -91,18 +95,32 @@ class Watchlist:
             input_date = datetime.strptime(start_date_formatted, "%Y-%m-%d")
             next_day = input_date + timedelta(days=1)
             end_date = next_day.strftime("%Y-%m-%d")
-            df = yf.download(stock, start=start_date_formatted, end=end_date, interval='5m', progress=False)
-            # Exclude the first bar because yfinance includes the sum of premarket volume for the first candle
-            df = df[1:]
-            evidence_of_selling = "False"
+            df = yf.download(stock, start=start_date_formatted, end=end_date, interval='1m', progress=False)
+            '''Exclude the first bar because yfinance includes the sum of premarket volume for the first candle,
+            and exclude the last bar because it is often MOC selling that with an ambiguous candle'''
+            df = df[1:-1]
+            evidence_of_selling = "No"
             highest_volume_row = df[df['Volume'] == df['Volume'].max()]
             if highest_volume_row['Open'].values[0] >= highest_volume_row['Close'].values[0]:
-                evidence_of_selling = "True"
+                evidence_of_selling = "Yes"
             return evidence_of_selling
-        except:
-            logger.warning(f"Unable to get_evidence_of_selling for {stock} for unknown reason")
-            return "Unknown"
-
+        except Exception as e:
+            logger.error(f"Unexpected error on get_evidence_of_selling request for {stock}: {e}")
+            return "No data"
+    
+    def calculate_volatility(self, closing_prices, stock):
+        try:
+            log_returns = [np.log(closing_prices[i] / closing_prices[i - 1]) for i in range(1, len(closing_prices))]
+            avg_return = np.mean(log_returns)
+            squared_deviations = [(log_return - avg_return) ** 2 for log_return in log_returns]
+            variance = np.mean(squared_deviations)
+            historical_volatility = np.sqrt(variance)
+            vol = round(historical_volatility * np.sqrt(252) * 100, 2)
+            return vol
+        except Exception as e:
+            logger.error(f"Unexpected error on calculate_volatility request for {stock}: {e}")
+            return "No data"
+        
     #Get yahoo finance stock data and screen for unusually bullish stocks along with their data
     async def get_stock_data(self, stock, i):
         try:
@@ -124,22 +142,15 @@ class Watchlist:
                 sector = self.get_sector(stock)
                 current_price = self.get_current_price(stock)
                 evidence_of_selling = self.get_evidence_of_selling(date, stock)
-                #Calculate volatility
-                closing_prices = stock_data['Close'][0:99]
-                log_returns = [np.log(closing_prices[i] / closing_prices[i - 1]) for i in range(1, len(closing_prices))]
-                avg_return = np.mean(log_returns)
-                squared_deviations = [(log_return - avg_return) ** 2 for log_return in log_returns]
-                variance = np.mean(squared_deviations)
-                historical_volatility = np.sqrt(variance)
-                vol = round(historical_volatility * np.sqrt(252) * 100, 2)
-                momentum = self.closest_number(current_price, stock_data['High'][99], stock_data['Open'][98])
-                #if momentum and evidence_of_selling == 'False':
-                print(
-                        f"{stock:>5}{date.strftime('%m/%d/%Y'):>14}{sector:^30}{mc:>8}{format(round(equity_vol), ','):>15}"
-                        f"{round(gap, 2):>11}%{round(vol_ratio, 2):>11}{sf:>12}{vol:>13}{evidence_of_selling:>15}")
-                self.stocks_in_play += 1
-                if vol > 100:
-                    self.sizzlers += 1
+                vol = self.calculate_volatility(stock_data['Close'][0:99], stock)
+                momentum = self.closest_number(current_price, stock_data['High'][99], stock_data['Open'][98], stock)
+                if momentum:
+                    print(
+                            f"{stock:>5}{date.strftime('%m/%d/%Y'):>14}{sector:^30}{mc:>8}{format(round(equity_vol), ','):>15}"
+                            f"{round(gap, 2):>11}%{round(vol_ratio, 2):>11}{sf:>12}{vol:>13}%{evidence_of_selling:>14}")
+                    self.stocks_in_play += 1
+                    if vol > 100:
+                        self.sizzlers += 1
         except KeyError:
             logger.warning(f"KeyError on get_stock_data request for {stock}")
         except IndexError:
@@ -150,10 +161,10 @@ class Watchlist:
         print("\n Stock      Date              Sector             MarketCap     EquityVol        Gap      VolRatio   "
               "ShortFloat   Volatility  EvidenceofSelling")
         #Grab 100 days of stock data and stop after doing that for the previous 10 days
-        for i in range(100, 130):
+        for i in range(100, 110):
             print(
-                f'{i}----------------------------------------------------------------------------------------'
-                f'----------------------------------------------------')
+                f'---------------------------------------------------------------------------------------'
+                f'-------------------------------------------------------')
             for stock in self.stocks:
                 tasks.append(asyncio.create_task(self.get_stock_data(stock, i)))
             await asyncio.gather(*tasks)
@@ -165,6 +176,9 @@ class Watchlist:
 if __name__ == '__main__':
     my_watchlist = Watchlist()
     asyncio.run(my_watchlist.main())
+    
+    
+
 
 
 
