@@ -18,13 +18,9 @@ logger = logging.getLogger(__name__)
 
 warnings.filterwarnings("ignore", category=RuntimeWarning, message="divide by zero")
 
-class Watchlist:
-    def __init__(self):
-        self.stocks = stocks_list.stocks
-        self.stocks_in_play = 0
-        self.sizzlers = 0
 
-    def get_market_cap(self, stock):
+class DataCollector:
+    def get_market_cap(stock):
         try:
             url = f'https://www.marketwatch.com/investing/stock/{stock}?mod=search_symbol'
             res = requests.get(url)
@@ -35,8 +31,8 @@ class Watchlist:
         except Exception as e:
             logger.error(f"Unexpected error on get_market_cap request for {stock}: {e}")
             return "No data"
-
-    def get_short_float(self, stock):
+        
+    def get_short_float(stock):
         try:
             url = f'https://www.marketwatch.com/investing/stock/{stock}?mod=search_symbol'
             res = requests.get(url)
@@ -47,8 +43,8 @@ class Watchlist:
         except Exception as e:
             logger.error(f"Unexpected error on get_short_float request for {stock}: {e}")
             return "No data"
-
-    def get_sector(self, stock):
+        
+    def get_sector(stock):
         try:
             url = f'https://www.marketwatch.com/investing/stock/{stock}/company-profile?mod=mw_quote_tab'
             res = requests.get(url)
@@ -62,20 +58,8 @@ class Watchlist:
         except Exception as e:
             logger.error(f"Unexpected error on get_sector request for {stock}: {e}")
             return "N/A"
-
-    def closest_number(self, close, high, low, stock):
-        try:
-            dist1 = abs(close - high)
-            dist2 = abs(close - low)
-            if dist1 < dist2:
-                return True
-            else:
-                return False
-        except Exception as e:
-            logger.critical(f"Unexpected error on closest_number calculation for {stock}: {e}")
-            return True
-
-    def get_current_price(self, stock):
+    
+    def get_current_price(stock):
         try:
             url = f'https://www.marketwatch.com/investing/stock/{stock}?mod=search_symbol'
             res = requests.get(url)
@@ -87,8 +71,8 @@ class Watchlist:
         except Exception as e:
             logger.critical(f"Unexpected error on get_current_price request for {stock}: {e}")
             return 999
-
-    def get_evidence_of_selling(self, start_date, stock):
+    
+    def get_evidence_of_selling(start_date, stock):
         try:
             timestamp = datetime.strptime(str(start_date), "%Y-%m-%d %H:%M:%S%z")
             start_date_formatted = timestamp.strftime("%Y-%m-%d")
@@ -107,8 +91,8 @@ class Watchlist:
         except Exception as e:
             logger.error(f"Unexpected error on get_evidence_of_selling request for {stock}: {e}")
             return "No data"
-    
-    def calculate_volatility(self, closing_prices, stock):
+        
+    def calculate_volatility(closing_prices, stock):
         try:
             log_returns = [np.log(closing_prices[i] / closing_prices[i - 1]) for i in range(1, len(closing_prices))]
             avg_return = np.mean(log_returns)
@@ -120,6 +104,25 @@ class Watchlist:
         except Exception as e:
             logger.error(f"Unexpected error on calculate_volatility request for {stock}: {e}")
             return "No data"
+        
+class Watchlist:
+    def __init__(self):
+        self.data_processor = DataCollector()
+        self.stocks = stocks_list.stocks
+        self.stocks_in_play = 0
+        self.sizzlers = 0
+
+    def closest_number(self, close, high, low, stock):
+        try:
+            dist1 = abs(close - high)
+            dist2 = abs(close - low)
+            if dist1 < dist2:
+                return True
+            else:
+                return False
+        except Exception as e:
+            logger.critical(f"Unexpected error on closest_number calculation for {stock}: {e}")
+            return True
         
     #Get yahoo finance stock data and screen for unusually bullish stocks along with their data
     async def get_stock_data(self, stock, i):
@@ -137,17 +140,17 @@ class Watchlist:
             #If stock passes screen, fetch data for it and print
             if green_initial_day and round(gap) >= 3 and equity_vol >= 250000 and round(vol_ratio) > 3:
                 date = stock_data['Date'][99]
-                mc = self.get_market_cap(stock)
-                sf = self.get_short_float(stock)
-                sector = self.get_sector(stock)
-                current_price = self.get_current_price(stock)
-                evidence_of_selling = self.get_evidence_of_selling(date, stock)
-                vol = self.calculate_volatility(stock_data['Close'][0:99], stock)
+                mc = DataCollector.get_market_cap(stock)
+                sf = DataCollector.get_short_float(stock)
+                sector = DataCollector.get_sector(stock)
+                current_price = DataCollector.get_current_price(stock)
+                evidence_of_selling = DataCollector.get_evidence_of_selling(date, stock)
+                vol = DataCollector.calculate_volatility(stock_data['Close'][0:99], stock)
                 momentum = self.closest_number(current_price, stock_data['High'][99], stock_data['Open'][98], stock)
                 if momentum:
                     print(
-                            f"{stock:>5}{date.strftime('%m/%d/%Y'):>14}{sector:^30}{mc:>8}{format(round(equity_vol), ','):>15}"
-                            f"{round(gap, 2):>11}%{round(vol_ratio, 2):>11}{sf:>12}{vol:>13}%{evidence_of_selling:>14}")
+                        f"{stock:>5}{date.strftime('%m/%d/%Y'):>14}{sector:^30}{mc:>8}{format(round(equity_vol), ','):>15}"
+                        f"{round(gap, 2):>11}%{round(vol_ratio, 2):>11}{sf:>12}{vol:>13}%{evidence_of_selling:>14}")
                     self.stocks_in_play += 1
                     if vol > 100:
                         self.sizzlers += 1
@@ -158,7 +161,7 @@ class Watchlist:
 
     async def main(self):
         tasks = []
-        print("\n Stock      Date              Sector             MarketCap     EquityVol        Gap      VolRatio   "
+        print("\n Stock      Date               Sector            MarketCap     EquityVol        Gap      VolRatio   "
               "ShortFloat   Volatility  EvidenceofSelling")
         #Grab 100 days of stock data and stop after doing that for the previous 10 days
         for i in range(100, 110):
@@ -177,6 +180,9 @@ if __name__ == '__main__':
     my_watchlist = Watchlist()
     asyncio.run(my_watchlist.main())
     
+    
+
+
     
 
 
