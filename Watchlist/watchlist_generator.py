@@ -109,6 +109,7 @@ class Watchlist:
     def __init__(self):
         self.data_processor = DataCollector()
         self.stocks = stocks_list.stocks
+        #self.stocks = ['GNS']
         self.stocks_in_play = 0
         self.sizzlers = 0
 
@@ -131,28 +132,32 @@ class Watchlist:
             p = str(i) + 'd'
             stock_data = await asyncio.to_thread(ticker.history, period=p)
             stock_data = stock_data.reset_index()
-            #Since we are grabbing 100 days of data, [99] is the most recent day and [98] is the day before, etc.
-            gap = (stock_data['Open'][99] - stock_data['High'][98]) / stock_data['High'][98] * 100
-            green_initial_day = stock_data['Close'][99] > stock_data['Open'][99]
-            avg_vol = stock_data['Volume'][0:99].mean()
-            equity_vol = stock_data['Close'][50:99].mean() * stock_data['Volume'][50:99].median()
-            vol_ratio = stock_data['Volume'][99] / avg_vol
+            #Since we are grabbing 100 days of data, [49] is the most recent day and [48] is the day before, etc.
+            gap = (stock_data['Open'][49] - stock_data['High'][48]) / stock_data['High'][48] * 100
+            green_initial_day = stock_data['Close'][49] > stock_data['Open'][49]
+            avg_vol = stock_data['Volume'][0:49].mean()
+            equity_vol = stock_data['Close'][0:49].mean() * stock_data['Volume'][0:49].median()
+            vol_ratio = stock_data['Volume'][49] / avg_vol
             #If stock passes screen, fetch data for it and print
-            if green_initial_day and round(gap) >= 3 and equity_vol >= 250000 and round(vol_ratio) > 3:
-                date = stock_data['Date'][99]
+            #print(green_initial_day)
+            #print(gap > 2)
+            #print(equity_vol > 250000)
+            #print(vol_ratio > 3)
+            if green_initial_day and round(gap) >= 2 and equity_vol >= 250000 and round(vol_ratio) > 3:
+                date = stock_data['Date'][49]
                 mc = DataCollector.get_market_cap(stock)
                 sf = DataCollector.get_short_float(stock)
                 sector = DataCollector.get_sector(stock)
                 current_price = DataCollector.get_current_price(stock)
                 evidence_of_selling = DataCollector.get_evidence_of_selling(date, stock)
-                vol = DataCollector.calculate_volatility(stock_data['Close'][0:99], stock)
-                momentum = self.closest_number(current_price, stock_data['High'][99], stock_data['Open'][98], stock)
-                if momentum:
+                vol = DataCollector.calculate_volatility(stock_data['Close'][0:49], stock)
+                momentum = self.closest_number(current_price, stock_data['High'][49], stock_data['Low'][49], stock)
+                if momentum and evidence_of_selling == "No":
                     print(
                         f"{stock:>5}{date.strftime('%m/%d/%Y'):>14}{sector:^30}{mc:>8}{format(round(equity_vol), ','):>15}"
                         f"{round(gap, 2):>11}%{round(vol_ratio, 2):>11}{sf:>12}{vol:>13}%{evidence_of_selling:>14}")
                     self.stocks_in_play += 1
-                    if vol > 100:
+                    if vol > 100 and stock not in self.sizzlers:
                         self.sizzlers += 1
         except KeyError:
             logger.warning(f"KeyError on get_stock_data request for {stock}")
@@ -164,9 +169,9 @@ class Watchlist:
         print("\n Stock      Date               Sector            MarketCap     EquityVol        Gap      VolRatio   "
               "ShortFloat   Volatility  EvidenceofSelling")
         #Grab 100 days of stock data and stop after doing that for the previous 10 days
-        for i in range(100, 110):
+        for i in range(50, 66):
             print(
-                f'---------------------------------------------------------------------------------------'
+                f'{i}-------------------------------------------------------------------------------------'
                 f'-------------------------------------------------------')
             for stock in self.stocks:
                 tasks.append(asyncio.create_task(self.get_stock_data(stock, i)))
@@ -179,9 +184,6 @@ class Watchlist:
 if __name__ == '__main__':
     my_watchlist = Watchlist()
     asyncio.run(my_watchlist.main())
-    
-    
-
 
     
 
