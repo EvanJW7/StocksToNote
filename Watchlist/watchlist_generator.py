@@ -109,9 +109,8 @@ class Watchlist:
     def __init__(self):
         self.data_processor = DataCollector()
         self.stocks = stocks_list.stocks
-        #self.stocks = ['GNS']
         self.stocks_in_play = 0
-        self.sizzlers = 0
+        self.sizzlers = []
 
     def closest_number(self, close, high, low, stock):
         try:
@@ -139,10 +138,6 @@ class Watchlist:
             equity_vol = stock_data['Close'][0:49].mean() * stock_data['Volume'][0:49].median()
             vol_ratio = stock_data['Volume'][49] / avg_vol
             #If stock passes screen, fetch data for it and print
-            #print(green_initial_day)
-            #print(gap > 2)
-            #print(equity_vol > 250000)
-            #print(vol_ratio > 3)
             if green_initial_day and round(gap) >= 2 and equity_vol >= 250000 and round(vol_ratio) > 3:
                 date = stock_data['Date'][49]
                 mc = DataCollector.get_market_cap(stock)
@@ -158,7 +153,7 @@ class Watchlist:
                         f"{round(gap, 2):>11}%{round(vol_ratio, 2):>11}{sf:>12}{vol:>13}%{evidence_of_selling:>14}")
                     self.stocks_in_play += 1
                     if vol > 100 and stock not in self.sizzlers:
-                        self.sizzlers += 1
+                        self.sizzlers.append(stock)
         except KeyError:
             logger.warning(f"KeyError on get_stock_data request for {stock}")
         except IndexError:
@@ -178,19 +173,13 @@ class Watchlist:
             await asyncio.gather(*tasks)
             tasks.clear()
         print(f"\nStocks in play: {self.stocks_in_play}")
-        print(f"Sizzlers: {self.sizzlers}\n")
+        print(f"Sizzlers: {len(self.sizzlers)}\n")
 
 
 if __name__ == '__main__':
     my_watchlist = Watchlist()
     asyncio.run(my_watchlist.main())
-
     
-
-
-
-
-
 
 
 
