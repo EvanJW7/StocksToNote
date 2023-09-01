@@ -131,7 +131,9 @@ class Watchlist:
             p = str(i) + 'd'
             stock_data = await asyncio.to_thread(ticker.history, period=p)
             stock_data = stock_data.reset_index()
-            #Since we are grabbing 100 days of data, [49] is the most recent day and [48] is the day before, etc.
+            if len(stock_data) < 50:
+                logger.warning("Not enough candlestick data for {stock}: length is {len(stock_data)}")
+            #Since we are grabbing 50 days of data, [49] is the most recent day and [48] is the day before, etc.
             gap = (stock_data['Open'][49] - stock_data['High'][48]) / stock_data['High'][48] * 100
             green_initial_day = stock_data['Close'][49] > stock_data['Open'][49]
             avg_vol = stock_data['Volume'][0:49].mean()
@@ -163,8 +165,8 @@ class Watchlist:
         tasks = []
         print("\n Stock      Date               Sector            MarketCap     EquityVol        Gap      VolRatio   "
               "ShortFloat   Volatility  EvidenceofSelling")
-        #Grab 100 days of stock data and stop after doing that for the previous 10 days
-        for i in range(50, 66):
+        #Grab 50 days of stock data and stop after doing after we do so for the previous 10 days
+        for i in range(50, 60):
             print(
                 f'{i}-------------------------------------------------------------------------------------'
                 f'-------------------------------------------------------')
